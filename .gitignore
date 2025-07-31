@@ -1,0 +1,9 @@
+# Python 가상환경 폴더
+venv/
+
+# Python 캐시 파일
+__pycache__/
+*.pyc
+
+# 환경 변수 파일 (비밀번호, API 키 등 민감 정보)
+.env

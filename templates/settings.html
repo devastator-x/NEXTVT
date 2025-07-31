@@ -1,0 +1,62 @@
+{% extends 'layout.html' %}
+{% block content %}
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h1 class="card-title">API 키 설정</h1>
+        <p>VirusTotal API 키를 입력해주세요. 키는 <a href="https://www.virustotal.com/gui/my-apikey" target="_blank">여기</a>에서 확인하실 수 있습니다.</p>
+        <form method="post" action="{{ url_for('settings') }}">
+            <div class="mb-3">
+                <label for="api_key" class="form-label">VirusTotal API Key</label>
+                <input type="password" class="form-control" id="api_key" name="api_key" value="{{ current_key }}" placeholder="기존 키가 있어도 여기에 표시되지 않습니다. 새 키를 입력하여 덮어쓰세요.">
+            </div>
+            <button type="submit" class="btn btn-primary">저장/업데이트</button>
+        </form>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h1 class="card-title">비밀번호 변경</h1>
+        <p>새로 사용할 비밀번호를 입력해주세요.</p>
+        <form id="change-password-form" method="post" action="{{ url_for('change_password') }}">
+            <div class="mb-3">
+                <label for="new_password" class="form-label">새 비밀번호 (6자리 이상)</label>
+                <input type="password" class="form-control" id="new_password" name="new_password" required minlength="6">
+            </div>
+            <div class="mb-3">
+                <label for="confirm_password" class="form-label">새 비밀번호 확인</label>
+                <input type="password" class="form-control" id="confirm_password" required minlength="6">
+            </div>
+            <button type="submit" class="btn btn-info">비밀번호 변경하기</button>
+        </form>
+    </div>
+</div>
+
+<div class="card border-danger">
+    <div class="card-header bg-danger text-white">
+        계정 관리
+    </div>
+    <div class="card-body">
+        <h5 class="card-title text-danger">계정 탈퇴</h5>
+        <p class="card-text">계정을 탈퇴하면 모든 정보가 영구적으로 삭제되며 복구할 수 없습니다. 신중하게 결정해주세요.</p>
+        <form method="post" action="{{ url_for('delete_account') }}" onsubmit="return confirm('정말로 계정을 탈퇴하시겠습니까? 이 작업은 되돌릴 수 없습니다.');">
+            <button type="submit" class="btn btn-danger">계정 탈퇴하기</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    // 비밀번호 변경 폼 제출 시, 두 비밀번호가 일치하는지 확인
+    document.getElementById('change-password-form').addEventListener('submit', function(event) {
+        const newPassword = document.getElementById('new_password').value;
+        const confirmPassword = document.getElementById('confirm_password').value;
+
+        if (newPassword !== confirmPassword) {
+            alert('새 비밀번호와 비밀번호 확인이 일치하지 않습니다.');
+            event.preventDefault(); // 폼 제출을 막습니다.
+        }
+    });
+</script>
+
+{% endblock %}

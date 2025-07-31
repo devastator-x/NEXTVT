@@ -1,0 +1,41 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1 class="card-title mb-0">관리자 페이지</h1>
+    </div>
+    <div class="card-body">
+        <h2 class="card-subtitle mb-3 text-muted">사용자 목록</h2>
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Email</th>
+                        <th>User ID</th>
+                        <th>마지막 로그인</th>
+                        <th>작업</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td>{{ user.email }}</td>
+                        <td>{{ user.id }}</td>
+                        <td>{{ user.last_sign_in_at.strftime('%Y-%m-%d %H:%M:%S') if user.last_sign_in_at else 'N/A' }}</td>
+			<td>
+                            <form action="{{ url_for('admin_reset_password', user_id=user.id) }}" method="post" onsubmit="return confirm('정말로 이 사용자의 비밀번호를 재설정하시겠습니까?');" style="display: inline-block;">
+                                <button type="submit" class="btn btn-warning btn-sm">임시 비밀번호 발급</button>
+                            </form>
+
+                            <form action="{{ url_for('admin_delete_user', user_id=user.id) }}" method="post" onsubmit="return confirm('경고: 이 사용자를 영구적으로 삭제합니다. 정말로 진행하시겠습니까?');" style="display: inline-block; margin-left: 5px;">
+                                <button type="submit" class="btn btn-danger btn-sm">사용자 삭제</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
