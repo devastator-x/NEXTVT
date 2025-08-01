@@ -1,5 +1,11 @@
 {% extends 'layout.html' %}
 {% block content %}
+<style>
+    .table th, .table td {
+        white-space: nowrap;      /* 텍스트 줄바꿈 방지 */
+        vertical-align: middle; /* 내용 세로 중앙 정렬 (버튼 정렬 개선) */
+    }
+</style>
 <div class="card">
     <div class="card-header">
         <h1 class="card-title mb-0">관리자 페이지</h1>
@@ -21,7 +27,7 @@
                     <tr>
                         <td>{{ user.email }}</td>
                         <td>{{ user.id }}</td>
-                        <td>{{ user.last_sign_in_at.strftime('%Y-%m-%d %H:%M:%S') if user.last_sign_in_at else 'N/A' }}</td>
+			<td>{{ user.last_sign_in_at | format_datetime if user.last_sign_in_at else 'N/A' }}</td>
 			<td>
                             <form action="{{ url_for('admin_reset_password', user_id=user.id) }}" method="post" onsubmit="return confirm('정말로 이 사용자의 비밀번호를 재설정하시겠습니까?');" style="display: inline-block;">
                                 <button type="submit" class="btn btn-warning btn-sm">임시 비밀번호 발급</button>
