@@ -25,11 +25,18 @@ export default function Navbar() {
         <div className="collapse navbar-collapse" id="navbarNav">
           <ul className="navbar-nav me-auto mb-2 mb-lg-0">
             {user && (
-              <li className="nav-item">
-                <Link href="/" className="nav-link">
-                  IP 스캔
-                </Link>
-              </li>
+              <>
+                <li className="nav-item">
+                  <Link href="/" className="nav-link">
+                    IP 스캔
+                  </Link>
+                </li>
+                <li className="nav-item">
+                  <Link href="/ping" className="nav-link">
+                    ping 체크
+                  </Link>
+                </li>
+              </>
             )}
           </ul>
           <ul className="navbar-nav ms-auto mb-2 mb-lg-0">
@@ -69,4 +76,3 @@ export default function Navbar() {
     </nav>
   );
 }
-

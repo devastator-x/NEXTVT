@@ -1,6 +1,6 @@
 import os
 import asyncio
-from flask import Flask, request, jsonify, session
+from flask import Flask, request, jsonify, session, Response
 from supabase import create_client, Client
 from dotenv import load_dotenv
 import vt
@@ -13,6 +13,9 @@ from datetime import datetime, timezone, timedelta
 from flask_cors import CORS
 import hashlib
 from pathlib import Path
+import subprocess
+import re
+import platform
 
 # .env 파일의 절대 경로를 명시적으로 지정하여 실행 위치에 상관없이 파일을 찾도록 합니다.
 env_path = Path(__file__).resolve().parent / '.env'
@@ -88,6 +91,55 @@ async def get_ip_info(client, ip):
 # API Routes
 # ===================================================================
 
+# --- Ping 체크 API ---
+
+@app.route('/api/ping', methods=['POST'])
+@login_required
+def api_ping():
+    data = request.get_json()
+    target = data.get('target')
+    count = data.get('count')
+
+    # Input validation
+    if not target or not isinstance(target, str):
+        return jsonify(success=False, message="대상을 입력해주세요."), 400
+    
+    # Regex for a valid IP address or domain name
+    if not re.match(r"^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$|^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)+([A-Za-z]|[A-Za-z][A-Za-z0-9\-]*[A-Za-z0-9])$", target):
+        return jsonify(success=False, message="유효하지 않은 IP 주소 또는 도메인입니다."), 400
+
+    try:
+        count = int(count)
+        if not (0 <= count <= 500):
+            raise ValueError()
+    except (ValueError, TypeError):
+        return jsonify(success=False, message="Ping 횟수는 0에서 500 사이의 숫자여야 합니다."), 400
+
+    def generate_ping():
+        system = platform.system().lower()
+        if system == "windows":
+            command = ['ping', target]
+            if count > 0:
+                command.extend(['-n', str(count)])
+            else: # Infinite ping
+                command.append('-t')
+        else: # Linux/macOS
+            command = ['ping', target]
+            if count > 0:
+                command.extend(['-c', str(count)])
+
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace')
+        
+        while True:
+            line = process.stdout.readline()
+            if not line:
+                break
+            yield line
+        
+        process.wait()
+
+    return Response(generate_ping(), mimetype='text/plain')
+    
 # --- 인증 API ---
 
 @app.route('/api/auth/signup', methods=['POST'])
@@ -298,4 +350,3 @@ def api_admin_delete_user(user_id):
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
-
