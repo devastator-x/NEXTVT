@@ -167,11 +167,14 @@ def api_login():
         
         session['user'] = res.user.dict()
         session['access_token'] = res.session.access_token
+        # ✨ [수정] 실제 refresh_token을 세션에 저장합니다.
+        session['refresh_token'] = res.session.refresh_token
 
         user_id = res.user.id
         
         auth_supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-        auth_supabase.auth.set_session(access_token=res.session.access_token, refresh_token="dummy")
+        # ✨ [수정] "dummy" 대신 실제 토큰을 사용하여 세션을 설정합니다.
+        auth_supabase.auth.set_session(access_token=res.session.access_token, refresh_token=res.session.refresh_token)
         
         profile = auth_supabase.table('profiles').select('is_admin, vt_api_key').eq('id', user_id).maybe_single().execute().data
         
@@ -195,11 +198,13 @@ def api_logout():
 
 @app.route('/api/auth/session', methods=['GET'])
 def api_check_session():
-    if 'user' in session:
+    # ✨ [수정] 세션에 'refresh_token'이 있는지 먼저 확인하여 KeyError를 방지합니다.
+    if 'user' in session and 'refresh_token' in session:
         user_id = session['user']['id']
         
         auth_supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-        auth_supabase.auth.set_session(access_token=session['access_token'], refresh_token="dummy")
+        # ✨ [수정] "dummy" 대신 세션에 저장된 실제 토큰을 사용합니다.
+        auth_supabase.auth.set_session(access_token=session['access_token'], refresh_token=session['refresh_token'])
         
         profile = auth_supabase.table('profiles').select('is_admin, vt_api_key').eq('id', user_id).maybe_single().execute().data
         
@@ -247,7 +252,8 @@ def api_scan():
         return jsonify(success=False, message="조회할 IP를 입력해주세요."), 400
     try:
         auth_supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-        auth_supabase.auth.set_session(access_token=session['access_token'], refresh_token="dummy")
+        # ✨ [수정] "dummy" 대신 세션에 저장된 실제 토큰을 사용합니다.
+        auth_supabase.auth.set_session(access_token=session['access_token'], refresh_token=session['refresh_token'])
         user_id = session['user']['id']
         profile = auth_supabase.table('profiles').select('vt_api_key').eq('id', user_id).maybe_single().execute().data
         if not profile or not profile.get('vt_api_key'):
@@ -275,7 +281,8 @@ def api_scan():
 @login_required
 def api_profile_api_key():
     auth_supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-    auth_supabase.auth.set_session(access_token=session['access_token'], refresh_token="dummy")
+    # ✨ [수정] "dummy" 대신 세션에 저장된 실제 토큰을 사용합니다.
+    auth_supabase.auth.set_session(access_token=session['access_token'], refresh_token=session['refresh_token'])
     user_id = session['user']['id']
     if request.method == 'GET':
         profile = auth_supabase.table('profiles').select('vt_api_key').eq('id', user_id).maybe_single().execute().data
@@ -295,7 +302,8 @@ def api_profile_password():
     if not new_password or len(new_password) < 6:
         return jsonify(success=False, message="비밀번호는 6자리 이상이어야 합니다."), 400
     auth_supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-    auth_supabase.auth.set_session(access_token=session['access_token'], refresh_token="dummy")
+    # ✨ [수정] "dummy" 대신 세션에 저장된 실제 토큰을 사용합니다.
+    auth_supabase.auth.set_session(access_token=session['access_token'], refresh_token=session['refresh_token'])
     auth_supabase.auth.update_user({'password': new_password})
     return jsonify(success=True, message="비밀번호가 성공적으로 변경되었습니다.")
 
@@ -350,3 +358,4 @@ def api_admin_delete_user(user_id):
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
+
