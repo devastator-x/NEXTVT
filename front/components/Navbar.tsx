@@ -33,7 +33,12 @@ export default function Navbar() {
                 </li>
                 <li className="nav-item">
                   <Link href="/ping" className="nav-link">
-                    ping 체크
+                    Ping 체크
+                  </Link>
+                </li>
+                <li className="nav-item">
+                  <Link href="/healthcheck" className="nav-link">
+                    Health 체크
                   </Link>
                 </li>
               </>
@@ -76,3 +81,4 @@ export default function Navbar() {
     </nav>
   );
 }
+

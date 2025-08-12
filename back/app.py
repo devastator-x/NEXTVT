@@ -16,6 +16,8 @@ from pathlib import Path
 import subprocess
 import re
 import platform
+import threading
+import time
 
 # .env 파일의 절대 경로를 명시적으로 지정하여 실행 위치에 상관없이 파일을 찾도록 합니다.
 env_path = Path(__file__).resolve().parent / '.env'
@@ -29,7 +31,7 @@ app.secret_key = os.getenv("SECRET_KEY")
 if not app.secret_key:
     raise ValueError("SECRET_KEY is not set in the .env file")
 
-# CORS 설정: 프론트엔드 개발 서버 및 실제 서비스 주소에서의 요청을 허용합니다.
+# CORS 설정
 CORS(
     app,
     origins=["https://vt.openpesto.com", "http://localhost:3000"],
@@ -49,7 +51,6 @@ supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 # ===================================================================
 
 def login_required(f):
-    """로그인한 사용자만 접근할 수 있도록 하는 데코레이터"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user' not in session:
@@ -58,7 +59,6 @@ def login_required(f):
     return decorated_function
 
 def admin_required(f):
-    """관리자만 접근할 수 있도록 하는 데코레이터"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not session.get('is_admin'):
@@ -67,12 +67,10 @@ def admin_required(f):
     return decorated_function
 
 def generate_temp_password(length=12):
-    """안전한 임시 비밀번호 생성"""
     alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
     return ''.join(secrets.choice(alphabet) for i in range(length))
 
 async def get_ip_info(client, ip):
-    """VirusTotal에서 IP 정보 비동기 조회"""
     result = {'country': '', 'as_owner': '', 'malicious': ''}
     try:
         ip_info = await client.get_object_async(f"/ip_addresses/{ip}")
@@ -88,11 +86,127 @@ async def get_ip_info(client, ip):
     return result
 
 # ===================================================================
+# 웹사이트 헬스체크 백그라운드 작업
+# ===================================================================
+def get_status_color(status_code):
+    if 200 <= status_code < 300:
+        return 'green'
+    elif 300 <= status_code < 400 or 500 <= status_code < 600:
+        return 'orange'
+    else:
+        return 'red'
+
+def check_websites_status():
+    try:
+        websites = supabase_admin.table('health_check_websites').select('id, url').execute().data
+        for site in websites:
+            status_color = 'red'
+            status_code = None
+            try:
+                headers = {'User-Agent': 'NEXTVT-Health-Checker/1.0'}
+                response = requests.get(site['url'], timeout=5, allow_redirects=True, headers=headers)
+                status_code = response.status_code
+                status_color = get_status_color(status_code)
+            except requests.exceptions.Timeout:
+                status_code = 408
+                status_color = 'red'
+            except requests.exceptions.ConnectionError:
+                status_code = 503
+                status_color = 'red'
+            except requests.exceptions.RequestException as e:
+                print(f"Error checking {site['url']}: {e}")
+                status_code = 500
+                status_color = 'red'
+            
+            # ✨ 'status'를 'status_color'로 수정
+            supabase_admin.table('health_check_websites').update({
+                'status_color': status_color,
+                'status_code': status_code,
+                'last_checked': datetime.now(timezone.utc).isoformat()
+            }).eq('id', site['id']).execute()
+
+    except Exception as e:
+        print(f"An error occurred in check_websites_status: {e}")
+
+
+def run_health_checks():
+    while True:
+        print("Running website health checks...")
+        check_websites_status()
+        time.sleep(60)
+
+# ===================================================================
 # API Routes
 # ===================================================================
 
-# --- Ping 체크 API ---
+# --- 헬스체크 API ---
+@app.route('/api/healthcheck', methods=['GET'])
+@login_required
+def get_health_check_data():
+    try:
+        categories = supabase.table('health_check_categories').select('*').order('id').execute().data
+        websites = supabase.table('health_check_websites').select('*').order('id').execute().data
+        
+        last_checked_time = None
+        if websites:
+            last_checked_times = [datetime.fromisoformat(w['last_checked']) for w in websites if w['last_checked']]
+            if last_checked_times:
+                last_checked_time = max(last_checked_times).astimezone(timezone(timedelta(hours=9))).strftime('%Y. %m. %d. %p %I:%M:%S')
 
+        result = []
+        for category in categories:
+            category['websites'] = [site for site in websites if site['category_id'] == category['id']]
+            result.append(category)
+
+        return jsonify(success=True, data=result, last_checked=last_checked_time)
+    except Exception as e:
+        return jsonify(success=False, message=str(e)), 500
+
+# --- 헬스체크 관리자 API ---
+@app.route('/api/admin/healthcheck/categories', methods=['POST'])
+@login_required
+@admin_required
+def add_category():
+    data = request.get_json()
+    name = data.get('name')
+    if not name:
+        return jsonify(success=False, message="카테고리 이름을 입력해주세요."), 400
+    
+    new_category = supabase_admin.table('health_check_categories').insert({'name': name}).execute().data
+    return jsonify(success=True, data=new_category)
+
+@app.route('/api/admin/healthcheck/websites', methods=['POST'])
+@login_required
+@admin_required
+def add_website():
+    data = request.get_json()
+    name = data.get('name')
+    url = data.get('url')
+    category_id = data.get('category_id')
+
+    if not all([name, url, category_id]):
+        return jsonify(success=False, message="모든 필드를 입력해주세요."), 400
+    
+    new_website = supabase_admin.table('health_check_websites').insert({
+        'name': name, 'url': url, 'category_id': category_id
+    }).execute().data
+    return jsonify(success=True, data=new_website)
+
+@app.route('/api/admin/healthcheck/websites/<int:site_id>', methods=['DELETE'])
+@login_required
+@admin_required
+def delete_website(site_id):
+    supabase_admin.table('health_check_websites').delete().eq('id', site_id).execute()
+    return jsonify(success=True, message="웹사이트가 삭제되었습니다.")
+    
+@app.route('/api/admin/healthcheck/categories/<int:category_id>', methods=['DELETE'])
+@login_required
+@admin_required
+def delete_category(category_id):
+    supabase_admin.table('health_check_categories').delete().eq('id', category_id).execute()
+    return jsonify(success=True, message="카테고리가 삭제되었습니다.")
+
+# --- Ping 체크 API ---
 @app.route('/api/ping', methods=['POST'])
 @login_required
 def api_ping():
@@ -100,11 +214,9 @@ def api_ping():
     target = data.get('target')
     count = data.get('count')
 
-    # Input validation
     if not target or not isinstance(target, str):
         return jsonify(success=False, message="대상을 입력해주세요."), 400
     
-    # Regex for a valid IP address or domain name
     if not re.match(r"^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$|^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)+([A-Za-z]|[A-Za-z][A-Za-z0-9\-]*[A-Za-z0-9])$", target):
         return jsonify(success=False, message="유효하지 않은 IP 주소 또는 도메인입니다."), 400
 
@@ -121,9 +233,9 @@ def api_ping():
             command = ['ping', target]
             if count > 0:
                 command.extend(['-n', str(count)])
-            else: # Infinite ping
+            else:
                 command.append('-t')
-        else: # Linux/macOS
+        else:
             command = ['ping', target]
             if count > 0:
                 command.extend(['-c', str(count)])
@@ -141,7 +253,6 @@ def api_ping():
     return Response(generate_ping(), mimetype='text/plain')
     
 # --- 인증 API ---
-
 @app.route('/api/auth/signup', methods=['POST'])
 def api_signup():
     data = request.get_json()
@@ -167,14 +278,11 @@ def api_login():
         
         session['user'] = res.user.dict()
         session['access_token'] = res.session.access_token
-        # ✨ [수정] 실제 refresh_token을 세션에 저장합니다.
-        session['refresh_token'] = res.session.refresh_token
 
         user_id = res.user.id
         
         auth_supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-        # ✨ [수정] "dummy" 대신 실제 토큰을 사용하여 세션을 설정합니다.
-        auth_supabase.auth.set_session(access_token=res.session.access_token, refresh_token=res.session.refresh_token)
+        auth_supabase.auth.set_session(access_token=res.session.access_token, refresh_token="dummy")
         
         profile = auth_supabase.table('profiles').select('is_admin, vt_api_key').eq('id', user_id).maybe_single().execute().data
         
@@ -198,13 +306,11 @@ def api_logout():
 
 @app.route('/api/auth/session', methods=['GET'])
 def api_check_session():
-    # ✨ [수정] 세션에 'refresh_token'이 있는지 먼저 확인하여 KeyError를 방지합니다.
-    if 'user' in session and 'refresh_token' in session:
+    if 'user' in session:
         user_id = session['user']['id']
         
         auth_supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-        # ✨ [수정] "dummy" 대신 세션에 저장된 실제 토큰을 사용합니다.
-        auth_supabase.auth.set_session(access_token=session['access_token'], refresh_token=session['refresh_token'])
+        auth_supabase.auth.set_session(access_token=session['access_token'], refresh_token="dummy")
         
         profile = auth_supabase.table('profiles').select('is_admin, vt_api_key').eq('id', user_id).maybe_single().execute().data
         
@@ -242,7 +348,6 @@ def api_forgot_password():
     return jsonify(success=True, message="관리자에게 비밀번호 재설정 요청을 보냈습니다.")
 
 # --- IP 스캔 API ---
-
 @app.route('/api/scan', methods=['POST'])
 @login_required
 def api_scan():
@@ -252,8 +357,7 @@ def api_scan():
         return jsonify(success=False, message="조회할 IP를 입력해주세요."), 400
     try:
         auth_supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-        # ✨ [수정] "dummy" 대신 세션에 저장된 실제 토큰을 사용합니다.
-        auth_supabase.auth.set_session(access_token=session['access_token'], refresh_token=session['refresh_token'])
+        auth_supabase.auth.set_session(access_token=session['access_token'], refresh_token="dummy")
         user_id = session['user']['id']
         profile = auth_supabase.table('profiles').select('vt_api_key').eq('id', user_id).maybe_single().execute().data
         if not profile or not profile.get('vt_api_key'):
@@ -268,7 +372,7 @@ def api_scan():
         scan_results = []
         for i, ip_address in enumerate(ips):
             result_item = results_list[i]
-            result_item['ip'] = ip_address # 각 결과 객체에 'ip' 키를 추가합니다.
+            result_item['ip'] = ip_address
             scan_results.append(result_item)
 
         return jsonify(success=True, results=scan_results)
@@ -276,23 +380,16 @@ def api_scan():
         return jsonify(success=False, message=f"IP 조회 중 오류 발생: {e}"), 500
 
 # --- MY 페이지 (프로필) API ---
-
-@app.route('/api/profile/api_key', methods=['GET', 'POST'])
+@app.route('/api/profile/api_key', methods=['POST'])
 @login_required
 def api_profile_api_key():
     auth_supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-    # ✨ [수정] "dummy" 대신 세션에 저장된 실제 토큰을 사용합니다.
-    auth_supabase.auth.set_session(access_token=session['access_token'], refresh_token=session['refresh_token'])
+    auth_supabase.auth.set_session(access_token=session['access_token'], refresh_token="dummy")
     user_id = session['user']['id']
-    if request.method == 'GET':
-        profile = auth_supabase.table('profiles').select('vt_api_key').eq('id', user_id).maybe_single().execute().data
-        api_key_exists = bool(profile and profile.get('vt_api_key'))
-        return jsonify(success=True, api_key_exists=api_key_exists)
-    if request.method == 'POST':
-        data = request.get_json()
-        api_key = data.get('api_key')
-        auth_supabase.table('profiles').update({'vt_api_key': api_key}).eq('id', user_id).execute()
-        return jsonify(success=True, message="API 키가 성공적으로 저장되었습니다.")
+    data = request.get_json()
+    api_key = data.get('api_key')
+    auth_supabase.table('profiles').update({'vt_api_key': api_key}).eq('id', user_id).execute()
+    return jsonify(success=True, message="API 키가 성공적으로 저장되었습니다.")
 
 @app.route('/api/profile/password', methods=['POST'])
 @login_required
@@ -302,8 +399,7 @@ def api_profile_password():
     if not new_password or len(new_password) < 6:
         return jsonify(success=False, message="비밀번호는 6자리 이상이어야 합니다."), 400
     auth_supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-    # ✨ [수정] "dummy" 대신 세션에 저장된 실제 토큰을 사용합니다.
-    auth_supabase.auth.set_session(access_token=session['access_token'], refresh_token=session['refresh_token'])
+    auth_supabase.auth.set_session(access_token=session['access_token'], refresh_token="dummy")
     auth_supabase.auth.update_user({'password': new_password})
     return jsonify(success=True, message="비밀번호가 성공적으로 변경되었습니다.")
 
@@ -319,7 +415,6 @@ def api_delete_account():
         return jsonify(success=False, message=f"계정 삭제 중 오류 발생: {e}"), 500
 
 # --- 관리자 API ---
-
 @app.route('/api/admin/users', methods=['GET'])
 @login_required
 @admin_required
@@ -355,7 +450,8 @@ def api_admin_delete_user(user_id):
 # ===================================================================
 # 개발 서버 실행
 # ===================================================================
-
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    health_check_thread = threading.Thread(target=run_health_checks, daemon=True)
+    health_check_thread.start()
+    app.run(host='0.0.0.0', port=5000, debug=False)
 
