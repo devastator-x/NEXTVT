@@ -157,7 +157,7 @@ function IpScanner() {
 }
 
 // ===================================================================
-// ✨ DNS 조회 컴포넌트 (수정됨)
+// DNS 조회 컴포넌트 (수정됨)
 // ===================================================================
 interface ARecord {
     ip: string;
@@ -173,7 +173,6 @@ function DnsLookup() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // ✨ 레코드 타입별 색상 맵
     const recordTypeColors: { [key: string]: string } = {
         A: 'bg-success',
         AAAA: 'bg-primary',
@@ -233,7 +232,6 @@ function DnsLookup() {
                                     <ul className="list-group">
                                         {records.map((record, index) => (
                                             <li key={index} className="list-group-item font-monospace" style={{fontSize: '0.875rem'}}>
-                                                {/* ✨ A 레코드일 경우 국가 정보 표시 */}
                                                 {type === 'A' && typeof record === 'object' ? (
                                                     <span>
                                                         {(record as ARecord).ip}
@@ -250,6 +248,62 @@ function DnsLookup() {
                         ))}
                     </div>
                 )}
+            </div>
+        </div>
+    );
+}
+
+// ===================================================================
+// Reverse DNS 조회 컴포넌트 (신규 추가)
+// ===================================================================
+function ReverseDnsLookup() {
+    const [ip, setIp] = useState('');
+    const [result, setResult] = useState<string | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const handleLookup = async (e: FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        setError(null);
+        setResult(null);
+        try {
+            const response = await axios.post('/api/reversedns', { ip }, { withCredentials: true });
+            if (response.data.success) {
+                setResult(response.data.data);
+            } else {
+                setError(response.data.message);
+            }
+        } catch (err: any) {
+            setError(err.response?.data?.message || '서버에 연결할 수 없습니다.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="card">
+            <div className="card-body">
+                <h1 className="card-title">Reverse DNS 조회</h1>
+                 <form onSubmit={handleLookup}>
+                    <div className="input-group mb-3">
+                        <input
+                            type="text"
+                            className="form-control"
+                            value={ip}
+                            onChange={e => setIp(e.target.value)}
+                            placeholder="IP 주소 입력 (예: 8.8.8.8)"
+                            required
+                        />
+                        <button type="submit" className="btn btn-primary" disabled={loading}>
+                            {loading ? '조회 중...' : '조회'}
+                        </button>
+                    </div>
+                </form>
+                {loading && <div className="spinner-border spinner-border-sm" role="status"><span className="visually-hidden">Loading...</span></div>}
+                {error && <div className="alert alert-danger mt-2 p-2">{error}</div>}
+                {/* ✨ "결과:"를 "hostname:"으로 변경 */}
+                {result && <div className="alert alert-success mt-2 p-2"><strong>hostname:</strong> {result}</div>}
             </div>
         </div>
     );
@@ -286,9 +340,12 @@ export default function HomePage() {
             <div className="col-lg-6">
                 <IpScanner />
             </div>
-            {/* DNS 조회 */}
+            {/* 오른쪽 컬럼 (DNS 및 Reverse DNS) */}
             <div className="col-lg-6">
-                <DnsLookup />
+                <div className="d-flex flex-column gap-4">
+                    <DnsLookup />
+                    <ReverseDnsLookup />
+                </div>
             </div>
         </div>
     </div>

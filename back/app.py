@@ -23,6 +23,7 @@ import geoip2.database # ✨ geoip2 대신 maxminddb를 직접 사용
 import tarfile
 import csv
 import dns.resolver
+import dns.reversename
 
 # .env 파일의 절대 경로를 명시적으로 지정하여 실행 위치에 상관없이 파일을 찾도록 합니다.
 env_path = Path(__file__).resolve().parent / '.env'
@@ -389,6 +390,23 @@ def dns_lookup():
         reader.close()
 
     return jsonify(success=True, data=results)
+
+@app.route('/api/reversedns', methods=['POST'])
+@login_required
+def reverse_dns_lookup():
+    data = request.get_json()
+    ip = data.get('ip')
+    if not ip:
+        return jsonify(success=False, message="IP 주소를 입력해주세요."), 400
+    
+    try:
+        addr = dns.reversename.from_address(ip)
+        domain = str(dns.resolver.resolve(addr, "PTR")[0]).rstrip('.')
+        return jsonify(success=True, data=domain)
+    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+        return jsonify(success=False, message="해당 IP 주소에 대한 PTR 레코드를 찾을 수 없습니다.")
+    except Exception as e:
+        return jsonify(success=False, message=f"조회 중 오류 발생: {e}")
 
 # --- CTI API ---
 @app.route('/api/cti', methods=['GET'])
