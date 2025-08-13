@@ -5,15 +5,16 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState, FormEvent, ChangeEvent } from 'react';
 import axios from 'axios';
 
-// ✨ [수정] API 응답 결과의 타입을 리스트 형태로 변경합니다.
+// ===================================================================
+// IP 스캔 컴포넌트 (기존 코드)
+// ===================================================================
 interface ScanResult {
-  ip: string; // IP 주소를 포함
+  ip: string;
   country: string;
   as_owner: string;
   malicious: string;
 }
 
-// ... (ColumnKey, ALL_COLUMNS 타입 정의는 기존과 동일) ...
 type ColumnKey = 'country' | 'as_owner' | 'malicious';
 const ALL_COLUMNS: Record<ColumnKey, string> = {
   country: '국가',
@@ -23,14 +24,12 @@ const ALL_COLUMNS: Record<ColumnKey, string> = {
 
 function IpScanner() {
   const [ips, setIps] = useState('');
-  // ✨ [수정] results 상태를 ScanResult 배열로 변경합니다.
   const [results, setResults] = useState<ScanResult[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedColumns, setSelectedColumns] = useState<ColumnKey[]>(['country', 'as_owner', 'malicious']);
   const [isCopied, setIsCopied] = useState(false);
 
-  // ... (handleScan, handleColumnChange 함수는 기존과 동일) ...
   const handleScan = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
@@ -53,7 +52,7 @@ function IpScanner() {
         setError(response.data.message || '알 수 없는 오류가 발생했습니다.');
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || '서버에 연결할 수 없습니다. 백엔드 서버가 실행 중인지 확인해주세요.');
+      setError(err.response?.data?.message || '서버에 연결할 수 없습니다.');
     } finally {
       setLoading(false);
     }
@@ -69,15 +68,11 @@ function IpScanner() {
 
   const handleCopyResults = () => {
     if (!results) return;
-
-    // ✨ [수정] 리스트 형식의 results를 처리하도록 수정합니다.
     const rows = results.map(info => {
       const rowData = [info.ip, ...selectedColumns.map(col => info[col])];
       return rowData.join('\t');
     });
-
     const textToCopy = rows.join('\n');
-    
     navigator.clipboard.writeText(textToCopy).then(() => {
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
@@ -85,9 +80,8 @@ function IpScanner() {
   };
 
   return (
-    <div className="card">
-      <div className="card-body">
-        {/* ... (폼 부분은 기존과 동일) ... */}
+    <div className="card h-100">
+      <div className="card-body d-flex flex-column">
         <h1 className="card-title">IP 정보 조회</h1>
         <form onSubmit={handleScan}>
           <div className="mb-3">
@@ -95,7 +89,7 @@ function IpScanner() {
             <textarea
               id="ips"
               className="form-control"
-              rows={10}
+              rows={5}
               placeholder={"8.8.8.8\n1.1.1.1"}
               value={ips}
               onChange={(e) => setIps(e.target.value)}
@@ -126,15 +120,11 @@ function IpScanner() {
         {error && <div className="alert alert-danger mt-3">{error}</div>}
 
         {results && (
-          <div className="mt-4">
+          <div className="mt-4 flex-grow-1" style={{ overflowY: 'auto' }}>
             <div className="d-flex justify-content-between align-items-center mb-3">
               <h2 className="mb-0">조회 결과</h2>
               <button onClick={handleCopyResults} className="btn btn-light" title="결과 복사하기">
-                {isCopied ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="bi bi-check-lg" viewBox="0 0 16 16"><path d="M12.736 3.97a.733.733 0 0 1 1.047 0c.286.289.29.756.01 1.05L7.88 12.01a.733.733 0 0 1-1.065.02L3.217 8.384a.757.757 0 0 1 0-1.06.733.733 0 0 1 1.047 0l3.052 3.093 5.4-6.425a.247.247 0 0 1 .02-.022z"/></svg>
-                ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="bi bi-clipboard" viewBox="0 0 16 16"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1-1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/></svg>
-                )}
+                {isCopied ? '복사 완료!' : '복사'}
               </button>
             </div>
             <div className="table-responsive">
@@ -146,7 +136,6 @@ function IpScanner() {
                   </tr>
                 </thead>
                 <tbody>
-                  {/* ✨ [수정] 리스트를 순회하며 결과를 표시합니다. */}
                   {results.map((info) => (
                     <tr key={info.ip}>
                       <td>{info.ip}</td>
@@ -167,6 +156,109 @@ function IpScanner() {
   );
 }
 
+// ===================================================================
+// ✨ DNS 조회 컴포넌트 (수정됨)
+// ===================================================================
+interface ARecord {
+    ip: string;
+    country: string | null;
+}
+interface DnsResults {
+    [key: string]: string[] | ARecord[];
+}
+
+function DnsLookup() {
+    const [domain, setDomain] = useState('');
+    const [results, setResults] = useState<DnsResults | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    // ✨ 레코드 타입별 색상 맵
+    const recordTypeColors: { [key: string]: string } = {
+        A: 'bg-success',
+        AAAA: 'bg-primary',
+        MX: 'bg-info text-dark',
+        NS: 'bg-warning text-dark',
+        TXT: 'bg-secondary',
+        CNAME: 'bg-dark',
+        SOA: 'bg-danger',
+    };
+
+    const handleLookup = async (e: FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        setError(null);
+        setResults(null);
+        try {
+            const response = await axios.post('/api/dnslookup', { domain }, { withCredentials: true });
+            if (response.data.success) {
+                setResults(response.data.data);
+            } else {
+                setError(response.data.message || 'DNS 조회 중 오류가 발생했습니다.');
+            }
+        } catch (err: any) {
+            setError(err.response?.data?.message || '서버에 연결할 수 없습니다.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="card h-100">
+            <div className="card-body d-flex flex-column">
+                <h1 className="card-title">DNS 레코드 조회</h1>
+                <form onSubmit={handleLookup}>
+                    <div className="input-group mb-3">
+                        <input
+                            type="text"
+                            className="form-control"
+                            value={domain}
+                            onChange={e => setDomain(e.target.value)}
+                            placeholder="도메인 입력 (예: google.com)"
+                            required
+                        />
+                        <button type="submit" className="btn btn-primary" disabled={loading}>
+                            {loading ? '조회 중...' : '조회'}
+                        </button>
+                    </div>
+                </form>
+                {error && <div className="alert alert-danger">{error}</div>}
+
+                {results && (
+                    <div className="mt-3 flex-grow-1" style={{ overflowY: 'auto' }}>
+                        {Object.entries(results).map(([type, records]) => (
+                            records.length > 0 && (
+                                <div key={type} className="mb-3">
+                                    <h5><span className={`badge ${recordTypeColors[type] || 'bg-light text-dark'}`}>{type}</span></h5>
+                                    <ul className="list-group">
+                                        {records.map((record, index) => (
+                                            <li key={index} className="list-group-item font-monospace" style={{fontSize: '0.875rem'}}>
+                                                {/* ✨ A 레코드일 경우 국가 정보 표시 */}
+                                                {type === 'A' && typeof record === 'object' ? (
+                                                    <span>
+                                                        {(record as ARecord).ip}
+                                                        <span className="badge bg-light text-dark ms-2">{(record as ARecord).country || 'N/A'}</span>
+                                                    </span>
+                                                ) : (
+                                                    record as string
+                                                )}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+
+// ===================================================================
+// 메인 페이지 레이아웃
+// ===================================================================
 export default function HomePage() {
   const { user, isLoading } = useAuth();
   const router = useRouter();
@@ -187,6 +279,19 @@ export default function HomePage() {
     );
   }
 
-  return <IpScanner />;
+  return (
+    <div className="container-fluid">
+        <div className="row g-4">
+            {/* IP 스캔 */}
+            <div className="col-lg-6">
+                <IpScanner />
+            </div>
+            {/* DNS 조회 */}
+            <div className="col-lg-6">
+                <DnsLookup />
+            </div>
+        </div>
+    </div>
+  );
 }
 

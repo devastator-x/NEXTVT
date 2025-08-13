@@ -28,7 +28,7 @@ export default function Navbar() {
               <>
                 <li className="nav-item">
                   <Link href="/" className="nav-link">
-                    IP 스캔
+                    IP&DNS 스캔
                   </Link>
                 </li>
                 <li className="nav-item">

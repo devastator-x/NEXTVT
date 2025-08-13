@@ -22,6 +22,7 @@ from urllib.parse import urlparse
 import geoip2.database # ✨ geoip2 대신 maxminddb를 직접 사용
 import tarfile
 import csv
+import dns.resolver
 
 # .env 파일의 절대 경로를 명시적으로 지정하여 실행 위치에 상관없이 파일을 찾도록 합니다.
 env_path = Path(__file__).resolve().parent / '.env'
@@ -344,6 +345,50 @@ def run_cti_updates():
 # ===================================================================
 # API Routes
 # ===================================================================
+
+@app.route('/api/dnslookup', methods=['POST'])
+@login_required
+def dns_lookup():
+    data = request.get_json()
+    domain = data.get('domain')
+    if not domain:
+        return jsonify(success=False, message="도메인을 입력해주세요."), 400
+
+    results = {}
+    record_types = ['A', 'AAAA', 'MX', 'NS', 'TXT', 'CNAME', 'SOA']
+    
+    # ✨ 국가 조회를 위해 MMDB 리더 열기
+    reader = None
+    if MMDB_PATH.exists():
+        reader = geoip2.database.Reader(MMDB_PATH)
+
+    for record_type in record_types:
+        try:
+            answers = dns.resolver.resolve(domain, record_type)
+            records = []
+            for rdata in answers:
+                if record_type == 'A':
+                    ip_address = rdata.to_text()
+                    country = get_country_from_mmdb(ip_address, reader)
+                    records.append({'ip': ip_address, 'country': country})
+                elif record_type == 'MX':
+                    records.append(f"{rdata.preference} {rdata.exchange}")
+                elif record_type == 'SOA':
+                    records.append(f"{rdata.mname.to_text()} {rdata.rname.to_text()} {rdata.serial} {rdata.refresh} {rdata.retry} {rdata.expire} {rdata.minimum}")
+                else:
+                    records.append(rdata.to_text())
+            results[record_type] = records
+        except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN, dns.resolver.NoNameservers):
+            results[record_type] = []
+        except Exception as e:
+            print(f"Error resolving {record_type} for {domain}: {e}")
+            results[record_type] = [f"오류: {e}"]
+
+    # ✨ MMDB 리더 닫기
+    if reader:
+        reader.close()
+
+    return jsonify(success=True, data=results)
 
 # --- CTI API ---
 @app.route('/api/cti', methods=['GET'])
