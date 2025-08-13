@@ -113,13 +113,12 @@ export default function CtiPage() {
         const link = document.createElement('a');
         link.href = url;
 
-        const contentDisposition = response.headers['content-disposition'];
-        let filename = 'report.csv';
-        if (contentDisposition) {
-            const filenameMatch = contentDisposition.match(/filename="(.+)"/);
-            if (filenameMatch && filenameMatch.length === 2)
-                filename = filenameMatch[1];
-        }
+        // ✨ 프론트엔드에서 직접 파일명 생성
+        const today = new Date();
+        const year = today.getFullYear().toString().slice(-2);
+        const month = (today.getMonth() + 1).toString().padStart(2, '0');
+        const day = today.getDate().toString().padStart(2, '0');
+        const filename = `${year}${month}${day}_악성IP&URL.csv`;
         
         link.setAttribute('download', filename);
         document.body.appendChild(link);
