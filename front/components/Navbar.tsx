@@ -32,13 +32,20 @@ export default function Navbar() {
                   </Link>
                 </li>
                 <li className="nav-item">
+                  {/* ✨ 'ping 체크'를 'Ping 체크'로 변경 */}
                   <Link href="/ping" className="nav-link">
                     Ping 체크
                   </Link>
                 </li>
                 <li className="nav-item">
+                  {/* ✨ '웹사이트 상태'를 'Health 체크'로 변경 */}
                   <Link href="/healthcheck" className="nav-link">
                     Health 체크
+                  </Link>
+                </li>
+                <li className="nav-item">
+                  <Link href="/ipcalc" className="nav-link">
+                    ip 계산기
                   </Link>
                 </li>
               </>
