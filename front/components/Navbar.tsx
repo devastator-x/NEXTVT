@@ -48,6 +48,11 @@ export default function Navbar() {
                     ip 계산기
                   </Link>
                 </li>
+                <li className="nav-item">
+                  <Link href="/cti" className="nav-link">
+                    CTI
+                  </Link>
+                </li>
               </>
             )}
           </ul>

@@ -66,3 +66,6 @@ yarl==1.20.1
 zopfli==0.2.3.post1
 Flask-Cors
 requests
+geoip2 # MMDB 파일 처리를 위해 추가
+maxminddb # geoip2의 의존성 라이브러리
+tarfile
