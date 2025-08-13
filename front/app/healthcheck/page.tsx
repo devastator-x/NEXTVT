@@ -6,11 +6,13 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import Link from 'next/link';
 
+type StatusColor = 'green' | 'orange' | 'red' | 'pending';
+
 interface Website {
   id: number;
   name: string;
   url: string;
-  status_color: 'green' | 'orange' | 'red' | 'pending';
+  status_color: StatusColor;
   status_code: number | null;
 }
 
@@ -21,14 +23,15 @@ interface Category {
 }
 
 // 응답 코드 뱃지 컴포넌트
-const StatusBadge = ({ status_color, status_code }: { status_color: string, status_code: number | null }) => {
-  const colorMap = {
+const StatusBadge = ({ status_color, status_code }: { status_color: StatusColor, status_code: number | null }) => {
+  // ✨ colorMap의 key 타입도 명시적으로 StatusColor로 지정
+  const colorMap: Record<StatusColor, string> = {
     green: 'bg-success',
     orange: 'bg-warning text-dark',
     red: 'bg-danger',
     pending: 'bg-secondary'
-  };
-  
+  };  
+
   const badgeClass = colorMap[status_color] || colorMap.pending;
 
   return (
