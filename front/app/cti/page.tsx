@@ -29,6 +29,7 @@ export default function CtiPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(100);
   const [totalItems, setTotalItems] = useState(0);
+  const [reportLoading, setReportLoading] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -99,6 +100,40 @@ export default function CtiPage() {
         setTimeout(() => setIsCopied(false), 2000);
     });
   };
+
+  const handleGenerateReport = async () => {
+    setReportLoading(true);
+    try {
+        const response = await axios.get('/api/cti/report', {
+            withCredentials: true,
+            responseType: 'blob',
+        });
+
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+
+        const contentDisposition = response.headers['content-disposition'];
+        let filename = 'report.csv';
+        if (contentDisposition) {
+            const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+            if (filenameMatch && filenameMatch.length === 2)
+                filename = filenameMatch[1];
+        }
+        
+        link.setAttribute('download', filename);
+        document.body.appendChild(link);
+        link.click();
+        link.parentNode?.removeChild(link);
+        window.URL.revokeObjectURL(url);
+
+    } catch (error) {
+        console.error("Error generating report:", error);
+        alert("보고서 생성에 실패했습니다.");
+    } finally {
+        setReportLoading(false);
+    }
+  };
   
   const totalPages = Math.ceil(totalItems / itemsPerPage);
 
@@ -117,6 +152,9 @@ export default function CtiPage() {
       <div className="card-header d-flex justify-content-between align-items-center">
         <h1 className="mb-0">CTI - 위협 정보</h1>
         <div>
+          <button onClick={handleGenerateReport} className="btn btn-sm btn-success me-2" disabled={reportLoading}>
+            {reportLoading ? '생성 중...' : '보고서 생성'}
+          </button>
           <button onClick={() => fetchData(filter, currentPage, itemsPerPage)} className="btn btn-sm btn-outline-primary me-2" disabled={loading}>
             {loading ? '갱신 중...' : '새로고침'}
           </button>

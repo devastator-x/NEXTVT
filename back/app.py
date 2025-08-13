@@ -1,6 +1,6 @@
 import os
 import asyncio
-from flask import Flask, request, jsonify, session, Response
+from flask import Flask, request, jsonify, session, Response, send_file
 from supabase import create_client, Client
 from dotenv import load_dotenv
 import vt
@@ -19,11 +19,12 @@ import platform
 import threading
 import time
 from urllib.parse import urlparse
-import geoip2.database # ✨ geoip2 대신 maxminddb를 직접 사용
+import geoip2.database
 import tarfile
 import csv
 import dns.resolver
 import dns.reversename
+import io
 
 # .env 파일의 절대 경로를 명시적으로 지정하여 실행 위치에 상관없이 파일을 찾도록 합니다.
 env_path = Path(__file__).resolve().parent / '.env'
@@ -37,7 +38,8 @@ app.secret_key = os.getenv("SECRET_KEY")
 CORS(
     app,
     origins=["https://vt.openpesto.com", "http://localhost:3000"],
-    supports_credentials=True
+    supports_credentials=True,
+    expose_headers=['Content-Disposition']
 )
 
 # Supabase 클라이언트 초기화
@@ -346,6 +348,56 @@ def run_cti_updates():
 # ===================================================================
 # API Routes
 # ===================================================================
+
+@app.route('/api/cti/report', methods=['GET'])
+@login_required
+def get_cti_report():
+    try:
+        # 1. 가장 최근 IP 198개 조회
+        ips_response = supabase_admin.table('cti_indicators').select('value, country').eq('type', 'ipv4').order('added_at', desc=True).limit(198).execute()
+        ips = ips_response.data
+
+        # 2. 가장 최근 도메인 2개 조회
+        domains_response = supabase_admin.table('cti_indicators').select('value, country').eq('type', 'domain').order('added_at', desc=True).limit(2).execute()
+        domains = domains_response.data
+
+        # 3. CSV 데이터 준비
+        report_data = []
+        report_data.append(['URL', '공격 IP', '공격국가'])
+
+        # ✨ IP 데이터를 먼저 추가
+        for ip in ips:
+            report_data.append(['', ip['value'], ip['country']])
+            
+        # ✨ 그 다음 도메인 데이터를 추가
+        for domain in domains:
+            country = domain.get('country') if domain.get('country') and domain.get('country') != 'N/A' else '미국'
+            report_data.append([domain['value'], '', country])
+            
+        # 4. 메모리 상에서 CSV 파일 생성
+        si = io.StringIO()
+        cw = csv.writer(si)
+        cw.writerows(report_data)
+        
+        output = si.getvalue().encode('utf-8-sig')
+        
+        mem = io.BytesIO()
+        mem.write(output)
+        mem.seek(0)
+        
+        today_str = datetime.now().strftime('%y%m%d')
+        filename = f"{today_str}_악성IP&URL.csv"
+
+        return send_file(
+            mem,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='text/csv'
+        )
+
+    except Exception as e:
+        print(f"Error generating CTI report: {e}")
+        return jsonify(success=False, message=f"보고서 생성 중 오류 발생: {e}"), 500
 
 @app.route('/api/dnslookup', methods=['POST'])
 @login_required
