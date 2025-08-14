@@ -349,6 +349,67 @@ def run_cti_updates():
 # API Routes
 # ===================================================================
 
+@app.route('/api/yara', methods=['POST'])
+@login_required
+def generate_yara_rule():
+    data = request.get_json()
+    
+    rule_name = data.get('ruleName') or 'MyRule'
+    author = data.get('author') or 'N/A'
+    description = data.get('description') or 'No description provided.'
+    reference = data.get('reference') or 'N/A'
+    strings = data.get('strings', [])
+    condition = data.get('condition')
+
+    if not strings:
+        return jsonify(success=False, message="하나 이상의 문자열을 추가해야 합니다."), 400
+
+    # Meta 섹션 생성
+    meta_section = f"""
+    meta:
+        author = "{author}"
+        description = "{description}"
+        reference = "{reference}"
+        date = "{datetime.now().strftime('%Y-%m-%d')}"
+    """
+
+    # Strings 섹션 생성
+    strings_section_lines = []
+    condition_parts = []
+    for i, s in enumerate(strings):
+        str_id = f"$s{i+1}"
+        condition_parts.append(str_id)
+        if s.get('type') == 'hex':
+            # 헥스 문자열의 공백 제거
+            hex_value = ''.join(s.get('value', '').split())
+            strings_section_lines.append(f'        {str_id} = {{ {hex_value} }}')
+        else: # text
+            # 문자열 내의 특수문자 이스케이프 처리
+            escaped_value = s.get('value', '').replace('\\', '\\\\').replace('"', '\\"')
+            strings_section_lines.append(f'        {str_id} = "{escaped_value}" ascii wide')
+    
+    strings_section = "    strings:\n" + "\n".join(strings_section_lines)
+
+    # Condition 섹션 생성
+    if condition == 'all':
+        condition_expression = "all of them"
+    else: # any
+        condition_expression = "any of them"
+
+    condition_section = f"    condition:\n        {condition_expression}"
+
+    # 전체 규칙 조합
+    full_rule = f"""rule {rule_name}
+{{
+{meta_section}
+{strings_section}
+
+{condition_section}
+}}"""
+
+    return jsonify(success=True, rule=full_rule)
+
+
 @app.route('/api/cti/report', methods=['GET'])
 @login_required
 def get_cti_report():
@@ -790,5 +851,8 @@ if __name__ == '__main__':
     
     cti_update_thread = threading.Thread(target=run_cti_updates, daemon=True)
     cti_update_thread.start()
+
+    health_check_thread = threading.Thread(target=run_health_checks, daemon=True)
+    health_check_thread.start()    
     
     app.run(host='0.0.0.0', port=5000, debug=False)

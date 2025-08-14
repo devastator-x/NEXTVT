@@ -53,6 +53,11 @@ export default function Navbar() {
                     CTI
                   </Link>
                 </li>
+                <li className="nav-item">
+                  <Link href="/yara" className="nav-link">
+                    YARA 생성기
+                  </Link>
+                </li>
               </>
             )}
           </ul>
