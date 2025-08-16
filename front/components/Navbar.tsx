@@ -64,6 +64,11 @@ export default function Navbar() {
                     YARA 생성기
                   </Link>
                 </li>
+                <li className="nav-item">
+                  <Link className="nav-link" href="/pcap">
+                    패킷 분석
+                  </Link>
+                </li>
               </>
             )}
           </ul>

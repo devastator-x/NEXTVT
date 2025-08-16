@@ -71,3 +71,4 @@ maxminddb # geoip2의 의존성 라이브러리
 dnspython
 feedparser
 beautifulsoup4
+pyshark

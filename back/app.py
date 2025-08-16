@@ -24,6 +24,10 @@ import dns.resolver
 import dns.reversename
 import io
 import feedparser
+import pyshark
+from werkzeug.utils import secure_filename
+import uuid
+import os
 
 # .env 파일의 절대 경로를 명시적으로 지정
 env_path = Path(__file__).resolve().parent / '.env'
@@ -246,6 +250,127 @@ def run_cti_updates():
 # ===================================================================
 # API Routes
 # ===================================================================
+@app.route('/api/pcap/analyze', methods=['POST'])
+@login_required
+def analyze_pcap():
+    if 'pcap_file' not in request.files:
+        return jsonify(success=False, message="pcap 파일이 없습니다."), 400
+    
+    file = request.files['pcap_file']
+    if file.filename == '':
+        return jsonify(success=False, message="파일이 선택되지 않았습니다."), 400
+
+    if file and (file.filename.endswith('.pcap') or file.filename.endswith('.pcapng')):
+        filename = secure_filename(file.filename)
+        temp_filename = f"{uuid.uuid4()}_{filename}"
+        temp_path = os.path.join('/tmp', temp_filename)
+        file.save(temp_path)
+
+        display_filter = "http.request or ssh or ftp or ftp-data or smb or smb2"
+
+        packets_data = []
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+            cap = pyshark.FileCapture(temp_path, display_filter=display_filter)
+            
+            for packet in cap:
+                packet_type = 'unknown'
+                if 'HTTP' in packet and hasattr(packet.http, 'request_method'):
+                    packet_type = 'http'
+                elif 'SSH' in packet:
+                    packet_type = 'ssh'
+                elif 'FTP' in packet:
+                    packet_type = 'ftp'
+                elif 'FTP-DATA' in packet:
+                    packet_type = 'ftp-data'
+                elif 'SMB' in packet or 'SMB2' in packet or 'LANMAN' in packet:
+                    packet_type = 'smb'
+
+                packet_info = {
+                    'id': len(packets_data) + 1,
+                    'time': packet.sniff_time.isoformat(),
+                    'source_ip': 'N/A',
+                    'dest_ip': 'N/A',
+                    'protocol': packet.highest_layer,
+                    'info': '',
+                    'type': 'ftp' if packet_type in ['ftp', 'ftp-data'] else packet_type
+                }
+
+                if 'IP' in packet:
+                    packet_info['source_ip'] = packet.ip.src
+                    packet_info['dest_ip'] = packet.ip.dst
+                elif 'IPV6' in packet:
+                    packet_info['source_ip'] = packet.ipv6.src
+                    packet_info['dest_ip'] = packet.ipv6.dst
+                
+                # ✨ Info 필드 생성 로직을 프로토콜별로 더욱 상세하게 재구성합니다.
+                info = ""
+                if packet_type == 'http':
+                    info = f"{packet.http.request_method} {packet.http.request_uri}"
+                elif packet_type == 'ftp' and 'FTP' in packet:
+                    if hasattr(packet.ftp, 'request_command'):
+                        info = f"Request: {packet.ftp.request_command}"
+                        if hasattr(packet.ftp, 'request_arg'): info += f" ({packet.ftp.request_arg})"
+                    elif hasattr(packet.ftp, 'response_code'):
+                        info = f"Response: {packet.ftp.response_code}"
+                        if hasattr(packet.ftp, 'response_arg'): info += f" {packet.ftp.response_arg.strip()}"
+                elif packet_type == 'ssh' and 'SSH' in packet:
+                    if hasattr(packet.ssh, 'protocol'):
+                        info = f"Protocol: {packet.ssh.protocol}"
+                    elif hasattr(packet.ssh, 'message_code'):
+                        code = packet.ssh.message_code
+                        if code == '20': info = "Message: Key Exchange Init"
+                        elif code == '21': info = "Message: New Keys"
+                        # ... (기타 SSH 메시지 코드)
+                        elif hasattr(packet.ssh, 'message_code_str'): info = f"Message: {packet.ssh.message_code_str}"
+                elif packet_type == 'smb':
+                    # ✨ SMB/SMB2 정보 추출 로직을 대폭 강화합니다.
+                    info_parts = []
+                    layer = None
+                    if 'SMB2' in packet:
+                        layer = packet.smb2
+                        info_parts.append('SMB2')
+                    elif 'SMB' in packet:
+                        layer = packet.smb
+                        info_parts.append('SMB')
+
+                    if layer:
+                        if hasattr(layer, 'cmd_str'): info_parts.append(layer.cmd_str)
+                        if hasattr(layer, 'nt_status_str'): info_parts.append(f"Status: {layer.nt_status_str}")
+                        if hasattr(layer, 'filename'): info_parts.append(f"File: {layer.filename}")
+                    
+                    if len(info_parts) > 1: # SMB/SMB2 태그 외에 정보가 있으면
+                        info = " ".join(info_parts)
+                
+                # 최종 Info 값 할당 및 폴백(Fallback) 로직
+                if info:
+                    packet_info['info'] = info
+                elif hasattr(packet, 'info') and packet.info:
+                    packet_info['info'] = packet.info.strip()
+                elif 'TCP' in packet:
+                    packet_info['info'] = f"Src Port: {packet.tcp.srcport} -> Dst Port: {packet.tcp.dstport}"
+                elif 'UDP' in packet:
+                    packet_info['info'] = f"Src Port: {packet.udp.srcport} -> Dst Port: {packet.udp.dstport}"
+                else:
+                    packet_info['info'] = "N/A"
+
+                packets_data.append(packet_info)
+            
+            cap.close()
+            return jsonify(success=True, data=packets_data)
+
+        except Exception as e:
+            return jsonify(success=False, message=f"패킷 분석 중 오류 발생: {str(e)}"), 500
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            if 'loop' in locals() and not loop.is_closed():
+                loop.close()
+    
+    return jsonify(success=False, message="유효하지 않은 파일 형식입니다."), 400
+
 
 @app.route('/api/dashboard/ip', methods=['GET'])
 def get_user_ip():
