@@ -16,6 +16,7 @@ export default function Navbar() {
   return (
     <nav className="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
       <div className="container-fluid">
+        {/* ✨ 기본 링크를 대시보드로 변경 */}
         <Link href="/" className="navbar-brand">
           NEXTVT
         </Link>
@@ -26,19 +27,24 @@ export default function Navbar() {
           <ul className="navbar-nav me-auto mb-2 mb-lg-0">
             {user && (
               <>
+                {/* ✨ 대시보드 메뉴 추가 */}
                 <li className="nav-item">
                   <Link href="/" className="nav-link">
+                    대시보드
+                  </Link>
+                </li>
+                {/* ✨ IP 스캔 링크를 /scan으로 변경 */}
+                <li className="nav-item">
+                  <Link href="/scan" className="nav-link">
                     IP&DNS 스캔
                   </Link>
                 </li>
                 <li className="nav-item">
-                  {/* ✨ 'ping 체크'를 'Ping 체크'로 변경 */}
                   <Link href="/ping" className="nav-link">
                     Ping 체크
                   </Link>
                 </li>
                 <li className="nav-item">
-                  {/* ✨ '웹사이트 상태'를 'Health 체크'로 변경 */}
                   <Link href="/healthcheck" className="nav-link">
                     Health 체크
                   </Link>
